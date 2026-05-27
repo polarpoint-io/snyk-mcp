@@ -6,8 +6,6 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Minimal stubs to avoid requiring a live SNYK_TOKEN during tests
 # ---------------------------------------------------------------------------
