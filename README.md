@@ -71,10 +71,34 @@ See [`.env.example`](.env.example) for a copy-pasteable template.
 
 ## Client integrations
 
+Each client supports two transport options — **pip** (recommended, no Docker required) or **Docker**.
+
+```bash
+# Install once
+pip install pysnyk-mcp
+```
+
+---
+
 ### Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
+**pip (recommended)**
+```json
+{
+  "mcpServers": {
+    "snyk": {
+      "command": "pysnyk-mcp",
+      "env": {
+        "SNYK_TOKEN": "your_snyk_api_token"
+      }
+    }
+  }
+}
+```
+
+**Docker**
 ```json
 {
   "mcpServers": {
@@ -93,8 +117,37 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 }
 ```
 
-Or, using the pip-installed binary directly:
+Restart Claude Desktop after editing. You should see a hammer icon in the chat confirming the `snyk` server is connected with all 21 tools available.
 
+---
+
+### Claude Code
+
+**pip (recommended)**
+```bash
+pip install pysnyk-mcp
+
+claude mcp add snyk -- pysnyk-mcp
+# then export your token before running claude:
+export SNYK_TOKEN=your_snyk_api_token
+```
+
+**Docker**
+```bash
+claude mcp add snyk -- docker run --rm -i \
+  -e SNYK_TOKEN \
+  ghcr.io/polarpoint-io/snyk-mcp:latest
+
+export SNYK_TOKEN=your_snyk_api_token
+```
+
+---
+
+### Cursor
+
+Edit `~/.cursor/mcp.json`:
+
+**pip (recommended)**
 ```json
 {
   "mcpServers": {
@@ -108,20 +161,7 @@ Or, using the pip-installed binary directly:
 }
 ```
 
-### Claude Code
-
-```bash
-claude mcp add snyk -- docker run --rm -i \
-  -e SNYK_TOKEN \
-  ghcr.io/polarpoint-io/snyk-mcp:latest
-
-export SNYK_TOKEN=your_snyk_api_token
-```
-
-### Cursor
-
-Edit `~/.cursor/mcp.json`:
-
+**Docker**
 ```json
 {
   "mcpServers": {
@@ -135,8 +175,24 @@ Edit `~/.cursor/mcp.json`:
 }
 ```
 
+---
+
 ### VS Code (Continue)
 
+Edit `~/.continue/config.json`:
+
+**pip (recommended)**
+```json
+{
+  "mcpServers": [{
+    "name": "snyk",
+    "command": "pysnyk-mcp",
+    "env": { "SNYK_TOKEN": "your_snyk_api_token" }
+  }]
+}
+```
+
+**Docker**
 ```json
 {
   "mcpServers": [{
@@ -148,6 +204,26 @@ Edit `~/.cursor/mcp.json`:
   }]
 }
 ```
+
+---
+
+### HTTP / SSE (remote or shared server)
+
+If you prefer to run the server as a persistent HTTP service rather than a subprocess:
+
+```bash
+# pip
+pip install pysnyk-mcp
+SNYK_TOKEN=your_token TRANSPORT=http HTTP_PORT=8000 pysnyk-mcp
+
+# Docker
+docker run --rm -p 8000:8000 \
+  -e SNYK_TOKEN=your_snyk_api_token \
+  -e TRANSPORT=http \
+  ghcr.io/polarpoint-io/snyk-mcp:latest
+```
+
+Then point your MCP client at `http://localhost:8000/sse`.
 
 
 ## Tool reference
