@@ -243,6 +243,57 @@ def _make_mock_client():
 # ---------------------------------------------------------------------------
 
 @patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_org_ids(mock_get_client):
+    mock_get_client.return_value = _make_mock_client()
+    from pysnyk_mcp.server import snyk_list_org_ids
+
+    result = snyk_list_org_ids()
+    assert result["count"] == 1
+    org = result["organizations"][0]
+    assert org["id"] == "org-123"
+    assert org["name"] == "test-org"
+    assert "slug" in org
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_project_ids(mock_get_client):
+    mock_get_client.return_value = _make_mock_client()
+    from pysnyk_mcp.server import snyk_list_project_ids
+
+    result = snyk_list_project_ids(org_id="org-123")
+    assert result["count"] == 1
+    proj = result["projects"][0]
+    assert proj["org_id"] == "org-123"
+    assert proj["project_id"] == "proj-456"
+    assert proj["project_name"] == "my-project"
+    assert "origin" in proj
+    assert "type" in proj
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_project_ids_no_org(mock_get_client):
+    """Project IDs should aggregate across all orgs when org_id is omitted."""
+    mock_get_client.return_value = _make_mock_client()
+    from pysnyk_mcp.server import snyk_list_project_ids
+
+    result = snyk_list_project_ids()
+    assert result["count"] == 1
+    assert result["projects"][0]["org_id"] == "org-123"
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_project_ids_name_filter(mock_get_client):
+    mock_get_client.return_value = _make_mock_client()
+    from pysnyk_mcp.server import snyk_list_project_ids
+
+    result = snyk_list_project_ids(org_id="org-123", name_filter="my-project")
+    assert result["count"] == 1
+
+    result = snyk_list_project_ids(org_id="org-123", name_filter="nonexistent")
+    assert result["count"] == 0
+
+
+@patch("pysnyk_mcp.server.get_client")
 def test_snyk_list_organizations(mock_get_client):
     mock_get_client.return_value = _make_mock_client()
     from pysnyk_mcp.server import snyk_list_organizations

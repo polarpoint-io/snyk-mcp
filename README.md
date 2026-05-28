@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server that exposes [Snyk](https://snyk.io) to LL
 
 Ask an LLM things like "which of our npm projects have critical vulnerabilities?", "show me all CVEs in our nginx container image", or "test the latest version of lodash for known CVEs" — and the LLM answers by calling Snyk directly through this server.
 
-> **uvx**: `uvx pysnyk-mcp` &nbsp;·&nbsp; **PyPI**: `pip install pysnyk-mcp` &nbsp;·&nbsp; **Image**: `ghcr.io/polarpoint-io/snyk-mcp:latest` &nbsp;·&nbsp; **Repo**: <https://github.com/polarpoint-io/snyk-mcp>
+> **PyPI**: `pip install pysnyk-mcp` &nbsp;·&nbsp; **Image**: `ghcr.io/polarpoint-io/snyk-mcp:latest` &nbsp;·&nbsp; **Repo**: <https://github.com/polarpoint-io/snyk-mcp>
 
 ## Table of contents
 
@@ -21,20 +21,7 @@ Ask an LLM things like "which of our npm projects have critical vulnerabilities?
 
 ## Quick start
 
-### 1. uvx (recommended — zero install)
-
-[uv](https://docs.astral.sh/uv/) runs the server directly from PyPI with no prior installation step.
-
-```bash
-# Install uv once (if you don't have it)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-export SNYK_TOKEN=your_snyk_api_token
-uvx pysnyk-mcp                                          # stdio
-TRANSPORT=http HTTP_PORT=8000 uvx pysnyk-mcp            # HTTP/SSE
-```
-
-### 2. pip
+### 1. pip (no Docker)
 
 ```bash
 pip install pysnyk-mcp
@@ -44,7 +31,7 @@ pysnyk-mcp                                    # stdio
 TRANSPORT=http HTTP_PORT=8000 pysnyk-mcp      # HTTP/SSE
 ```
 
-### 3. Docker (stdio — launched by your MCP client)
+### 2. Docker (stdio — launched by your MCP client)
 
 ```bash
 docker pull ghcr.io/polarpoint-io/snyk-mcp:latest
@@ -54,7 +41,7 @@ docker run --rm -i \
   ghcr.io/polarpoint-io/snyk-mcp:latest
 ```
 
-### 4. Docker (HTTP/SSE — standalone service)
+### 3. Docker (HTTP/SSE — standalone service)
 
 ```bash
 docker run --rm \
@@ -84,7 +71,12 @@ See [`.env.example`](.env.example) for a copy-pasteable template.
 
 ## Client integrations
 
-Each client supports three options — **uvx** (recommended, zero install), **pip**, or **Docker**.
+Each client supports two transport options — **pip** (recommended, no Docker required) or **Docker**.
+
+```bash
+# Install once
+pip install pysnyk-mcp
+```
 
 ---
 
@@ -92,22 +84,7 @@ Each client supports three options — **uvx** (recommended, zero install), **pi
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
-**uvx (recommended)**
-```json
-{
-  "mcpServers": {
-    "snyk": {
-      "command": "uvx",
-      "args": ["pysnyk-mcp"],
-      "env": {
-        "SNYK_TOKEN": "your_snyk_api_token"
-      }
-    }
-  }
-}
-```
-
-**pip**
+**pip (recommended)**
 ```json
 {
   "mcpServers": {
@@ -140,23 +117,18 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 }
 ```
 
-Restart Claude Desktop after editing. You should see a hammer icon in the chat confirming the `snyk` server is connected with all 21 tools available.
+Restart Claude Desktop after editing. You should see a hammer icon in the chat confirming the `snyk` server is connected with all 23 tools available.
 
 ---
 
 ### Claude Code
 
-**uvx (recommended)**
-```bash
-claude mcp add snyk -- uvx pysnyk-mcp
-export SNYK_TOKEN=your_snyk_api_token
-```
-
-**pip**
+**pip (recommended)**
 ```bash
 pip install pysnyk-mcp
 
 claude mcp add snyk -- pysnyk-mcp
+# then export your token before running claude:
 export SNYK_TOKEN=your_snyk_api_token
 ```
 
@@ -175,22 +147,7 @@ export SNYK_TOKEN=your_snyk_api_token
 
 Edit `~/.cursor/mcp.json`:
 
-**uvx (recommended)**
-```json
-{
-  "mcpServers": {
-    "snyk": {
-      "command": "uvx",
-      "args": ["pysnyk-mcp"],
-      "env": {
-        "SNYK_TOKEN": "your_snyk_api_token"
-      }
-    }
-  }
-}
-```
-
-**pip**
+**pip (recommended)**
 ```json
 {
   "mcpServers": {
@@ -224,19 +181,7 @@ Edit `~/.cursor/mcp.json`:
 
 Edit `~/.continue/config.json`:
 
-**uvx (recommended)**
-```json
-{
-  "mcpServers": [{
-    "name": "snyk",
-    "command": "uvx",
-    "args": ["pysnyk-mcp"],
-    "env": { "SNYK_TOKEN": "your_snyk_api_token" }
-  }]
-}
-```
-
-**pip**
+**pip (recommended)**
 ```json
 {
   "mcpServers": [{
@@ -267,9 +212,6 @@ Edit `~/.continue/config.json`:
 If you prefer to run the server as a persistent HTTP service rather than a subprocess:
 
 ```bash
-# uvx
-SNYK_TOKEN=your_token TRANSPORT=http HTTP_PORT=8000 uvx pysnyk-mcp
-
 # pip
 pip install pysnyk-mcp
 SNYK_TOKEN=your_token TRANSPORT=http HTTP_PORT=8000 pysnyk-mcp
@@ -286,20 +228,27 @@ Then point your MCP client at `http://localhost:8000/sse`.
 
 ## Tool reference
 
-The server exposes **21 tools** grouped by capability. All return JSON. Errors from the Snyk API are caught and returned as `{"error": "...", "message": "..."}` so the LLM can handle them gracefully.
+The server exposes **23 tools** grouped by capability. All return JSON. Errors from the Snyk API are caught and returned as `{"error": "...", "message": "..."}` so the LLM can handle them gracefully.
+
+### Discovery (start here)
+
+| Tool | Description |
+|---|---|
+| `snyk_list_org_ids` | Compact org name → ID listing — use to find org_id values |
+| `snyk_list_project_ids` | Compact project name → ID listing across orgs — use to find project_id values |
 
 ### Organizations
 
 | Tool | Description |
 |---|---|
-| `snyk_list_organizations` | List all orgs the token has access to |
+| `snyk_list_organizations` | List all orgs the token has access to (full details) |
 | `snyk_get_organization` | Get details for a single org by ID |
 
 ### Projects
 
 | Tool | Description |
 |---|---|
-| `snyk_list_projects` | List projects (filter by org, name, or origin) |
+| `snyk_list_projects` | List projects with full details (filter by org, name, or origin) |
 | `snyk_get_project` | Full details for a single project |
 | `snyk_get_project_dependency_graph` | Full dependency tree for a project |
 

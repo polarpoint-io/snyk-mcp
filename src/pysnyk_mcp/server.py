@@ -1,6 +1,10 @@
 """FastMCP server exposing Snyk via pysnyk.
 
 Tools provided:
+    Discovery:
+        - snyk_list_org_ids
+        - snyk_list_project_ids
+
     Organizations:
         - snyk_list_organizations
         - snyk_get_organization
@@ -153,6 +157,31 @@ def snyk_list_organizations() -> dict:
 
 
 @mcp.tool()
+def snyk_list_org_ids() -> dict:
+    """Return a compact list of all Snyk organization names and IDs.
+
+    Use this as the first step to discover org_id values needed by other tools.
+    Much lighter than snyk_list_organizations — returns only id, name, and slug.
+    """
+    def _run() -> dict:
+        client = get_client()
+        orgs = client.organizations.all()
+        return {
+            "count": len(orgs),
+            "organizations": [
+                {
+                    "id": o.id,
+                    "name": o.name,
+                    "slug": getattr(o, "slug", None),
+                }
+                for o in orgs
+            ],
+        }
+
+    return _safe_call(_run)
+
+
+@mcp.tool()
 def snyk_get_organization(org_id: str) -> dict:
     """Get details for a single Snyk organization by ID.
 
@@ -204,6 +233,47 @@ def snyk_list_projects(
 
         projects = projects[:limit]
         return {"count": len(projects), "projects": _jsonable(projects)}
+
+    return _safe_call(_run)
+
+
+@mcp.tool()
+def snyk_list_project_ids(
+    org_id: str | None = None,
+    name_filter: str | None = None,
+) -> dict:
+    """Return a compact list of project names and IDs across organizations.
+
+    Use this to discover project_id and org_id values needed by other tools.
+    Much lighter than snyk_list_projects — returns only the key identifiers,
+    org context, origin, and type so the LLM can select the right project.
+
+    Args:
+        org_id: Restrict to projects in this organization. If omitted, returns
+                identifiers across all organizations.
+        name_filter: Substring filter on project name (case-sensitive).
+    """
+    def _run() -> dict:
+        client = get_client()
+        orgs = _resolve_orgs(client, org_id)
+
+        rows = []
+        for org in orgs:
+            for p in org.projects.all():
+                if name_filter and name_filter not in p.name:
+                    continue
+                rows.append(
+                    {
+                        "org_id": org.id,
+                        "org_name": org.name,
+                        "project_id": p.id,
+                        "project_name": p.name,
+                        "origin": getattr(p, "origin", None),
+                        "type": getattr(p, "type", None),
+                    }
+                )
+
+        return {"count": len(rows), "projects": rows}
 
     return _safe_call(_run)
 
