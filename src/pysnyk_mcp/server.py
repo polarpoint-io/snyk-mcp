@@ -121,6 +121,18 @@ def _jsonable(obj: Any) -> Any:
     return json.loads(json.dumps(_to_dict(obj), default=str))
 
 
+def _resolve_orgs(client, org_id: str | None) -> list:
+    """Return a list of org objects.
+
+    If *org_id* is provided, returns a single-element list containing that org.
+    Otherwise returns all organisations the token has access to, enabling
+    automatic org discovery without requiring the caller to supply an ID.
+    """
+    if org_id:
+        return [client.organizations.get(org_id)]
+    return client.organizations.all()
+
+
 # ---------------------------------------------------------------------------
 # Organizations
 # ---------------------------------------------------------------------------
@@ -448,53 +460,55 @@ def snyk_list_project_cves(
 
 @mcp.tool()
 def snyk_list_container_projects(
-    org_id: str,
+    org_id: str | None = None,
     limit: int = 100,
 ) -> dict:
-    """List container image projects monitored in a Snyk organization.
+    """List container image projects monitored across Snyk organizations.
 
     Filters projects to those with a container origin (Docker Hub, ACR, ECR, GCR,
-    Quay, Harbor, etc.) or type 'dockerimage'. Returns project name, ID, origin,
-    image details, and current issue counts by severity.
+    Quay, Harbor, etc.) or type 'dockerimage'. If org_id is omitted, searches
+    across all organisations. Each result includes org_id and org_name for context.
 
     Args:
-        org_id: The Snyk organization UUID.
-        limit: Maximum container projects to return (default 100).
+        org_id: Snyk organization UUID. If omitted, searches all organizations.
+        limit: Maximum container projects to return per organization (default 100).
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
-        all_projects = org.projects.all()
-
-        container_projects = [
-            p for p in all_projects
-            if getattr(p, "origin", "") in _CONTAINER_ORIGINS
-            or getattr(p, "type", "") in _CONTAINER_TYPES
-        ][:limit]
+        orgs = _resolve_orgs(client, org_id)
 
         rows = []
-        for p in container_projects:
-            counts = getattr(p, "issueCountsBySeverity", None)
-            rows.append(
-                {
-                    "id": p.id,
-                    "name": p.name,
-                    "origin": getattr(p, "origin", None),
-                    "type": getattr(p, "type", None),
-                    "is_monitored": getattr(p, "isMonitored", None),
-                    "last_tested": getattr(p, "lastTestedDate", None),
-                    "remote_repo_url": getattr(p, "remoteRepoUrl", None),
-                    "issue_counts": {
-                        "critical": getattr(counts, "critical", 0),
-                        "high": getattr(counts, "high", 0),
-                        "medium": getattr(counts, "medium", 0),
-                        "low": getattr(counts, "low", 0),
-                    } if counts else None,
-                }
-            )
+        for org in orgs:
+            all_projects = org.projects.all()
+            container_projects = [
+                p for p in all_projects
+                if getattr(p, "origin", "") in _CONTAINER_ORIGINS
+                or getattr(p, "type", "") in _CONTAINER_TYPES
+            ][:limit]
+
+            for p in container_projects:
+                counts = getattr(p, "issueCountsBySeverity", None)
+                rows.append(
+                    {
+                        "org_id": org.id,
+                        "org_name": org.name,
+                        "id": p.id,
+                        "name": p.name,
+                        "origin": getattr(p, "origin", None),
+                        "type": getattr(p, "type", None),
+                        "is_monitored": getattr(p, "isMonitored", None),
+                        "last_tested": getattr(p, "lastTestedDate", None),
+                        "remote_repo_url": getattr(p, "remoteRepoUrl", None),
+                        "issue_counts": {
+                            "critical": getattr(counts, "critical", 0),
+                            "high": getattr(counts, "high", 0),
+                            "medium": getattr(counts, "medium", 0),
+                            "low": getattr(counts, "low", 0),
+                        } if counts else None,
+                    }
+                )
 
         return {
-            "org_id": org_id,
             "count": len(rows),
             "container_projects": rows,
         }
@@ -577,22 +591,24 @@ def snyk_list_container_image_cves(
 
 @mcp.tool()
 def snyk_list_dependencies(
-    org_id: str,
+    org_id: str | None = None,
     project_id: str | None = None,
     limit: int = 100,
 ) -> dict:
     """List package dependencies for an organization or a specific project.
 
     Returns package names, versions, licenses, and whether any versions have issues.
+    If org_id is omitted, uses the first available organization.
 
     Args:
-        org_id: The Snyk organization UUID.
+        org_id: Snyk organization UUID. If omitted, uses the first available org.
         project_id: Optional project UUID to narrow results to one project.
         limit: Maximum dependencies to return (default 100).
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
+        orgs = _resolve_orgs(client, org_id)
+        org = orgs[0]
 
         if project_id:
             project = org.projects.get(project_id)
@@ -601,37 +617,52 @@ def snyk_list_dependencies(
             deps = org.dependencies.all()
 
         deps = deps[:limit]
-        return {"count": len(deps), "dependencies": _jsonable(deps)}
+        return {
+            "org_id": org.id,
+            "org_name": org.name,
+            "count": len(deps),
+            "dependencies": _jsonable(deps),
+        }
 
     return _safe_call(_run)
 
 
 @mcp.tool()
 def snyk_list_org_licenses(
-    org_id: str,
+    org_id: str | None = None,
     severity_filter: list[str] | None = None,
     limit: int = 100,
 ) -> dict:
-    """List licenses in use across an organization's projects.
+    """List licenses in use across organizations' projects.
 
     Useful for license compliance audits. Returns license type, severity,
     and which packages and projects use each license.
+    If org_id is omitted, aggregates results across all organizations.
 
     Args:
-        org_id: The Snyk organization UUID.
+        org_id: Snyk organization UUID. If omitted, aggregates across all orgs.
         severity_filter: Filter by severity, e.g. ['high', 'medium'].
-        limit: Maximum license entries to return (default 100).
+        limit: Maximum license entries to return per organization (default 100).
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
-        licenses = org.licenses.all()
+        orgs = _resolve_orgs(client, org_id)
 
-        if severity_filter:
-            licenses = [lic for lic in licenses if lic.severity in severity_filter]
+        all_licenses = []
+        for org in orgs:
+            licenses = org.licenses.all()
+            if severity_filter:
+                licenses = [lic for lic in licenses if lic.severity in severity_filter]
+            for lic in licenses[:limit]:
+                row = _jsonable(lic)
+                if isinstance(row, dict):
+                    row["org_id"] = org.id
+                    row["org_name"] = org.name
+                else:
+                    row = {"data": row, "org_id": org.id, "org_name": org.name}
+                all_licenses.append(row)
 
-        licenses = licenses[:limit]
-        return {"count": len(licenses), "licenses": _jsonable(licenses)}
+        return {"count": len(all_licenses), "licenses": all_licenses}
 
     return _safe_call(_run)
 
@@ -664,19 +695,32 @@ def snyk_list_project_licenses(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def snyk_list_members(org_id: str) -> dict:
-    """List all members of a Snyk organization.
+def snyk_list_members(org_id: str | None = None) -> dict:
+    """List all members across Snyk organizations.
 
     Returns member IDs, usernames, names, email addresses, and roles.
+    If org_id is omitted, returns members from all organizations, each
+    annotated with org_id and org_name for context.
 
     Args:
-        org_id: The Snyk organization UUID.
+        org_id: Snyk organization UUID. If omitted, lists members from all orgs.
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
-        members = org.members.all()
-        return {"count": len(members), "members": _jsonable(members)}
+        orgs = _resolve_orgs(client, org_id)
+
+        all_members = []
+        for org in orgs:
+            for m in org.members.all():
+                row = _jsonable(m)
+                if isinstance(row, dict):
+                    row["org_id"] = org.id
+                    row["org_name"] = org.name
+                else:
+                    row = {"data": row, "org_id": org.id, "org_name": org.name}
+                all_members.append(row)
+
+        return {"count": len(all_members), "members": all_members}
 
     return _safe_call(_run)
 
@@ -686,19 +730,32 @@ def snyk_list_members(org_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def snyk_list_integrations(org_id: str) -> dict:
-    """List source control and registry integrations active for an organization.
+def snyk_list_integrations(org_id: str | None = None) -> dict:
+    """List source control and registry integrations across Snyk organizations.
 
     Returns integration names and IDs (e.g. GitHub, Docker Hub, npm, etc.).
+    If org_id is omitted, returns integrations from all organizations, each
+    annotated with org_id and org_name for context.
 
     Args:
-        org_id: The Snyk organization UUID.
+        org_id: Snyk organization UUID. If omitted, lists integrations from all orgs.
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
-        integrations = org.integrations.all()
-        return {"count": len(integrations), "integrations": _jsonable(integrations)}
+        orgs = _resolve_orgs(client, org_id)
+
+        all_integrations = []
+        for org in orgs:
+            for integration in org.integrations.all():
+                row = _jsonable(integration)
+                if isinstance(row, dict):
+                    row["org_id"] = org.id
+                    row["org_name"] = org.name
+                else:
+                    row = {"data": row, "org_id": org.id, "org_name": org.name}
+                all_integrations.append(row)
+
+        return {"count": len(all_integrations), "integrations": all_integrations}
 
     return _safe_call(_run)
 
@@ -709,23 +766,25 @@ def snyk_list_integrations(org_id: str) -> dict:
 
 @mcp.tool()
 def snyk_test_npm_package(
-    org_id: str,
     package_name: str,
     version: str,
+    org_id: str | None = None,
 ) -> dict:
     """Test an npm package for known vulnerabilities.
 
     Args:
-        org_id: The Snyk organization UUID to scope the test to.
         package_name: npm package name, e.g. 'lodash'.
         version: Package version, e.g. '4.17.15'.
+        org_id: Snyk organization UUID to scope the test. If omitted, uses the first available org.
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
+        org = _resolve_orgs(client, org_id)[0]
         result = org.test_npm(package_name, version)
         return {
             "ok": result.ok,
+            "org_id": org.id,
+            "org_name": org.name,
             "package": package_name,
             "version": version,
             "packageManager": result.packageManager,
@@ -742,23 +801,25 @@ def snyk_test_npm_package(
 
 @mcp.tool()
 def snyk_test_python_package(
-    org_id: str,
     package_name: str,
     version: str,
+    org_id: str | None = None,
 ) -> dict:
     """Test a Python (PyPI) package for known vulnerabilities.
 
     Args:
-        org_id: The Snyk organization UUID to scope the test to.
         package_name: PyPI package name, e.g. 'flask'.
         version: Package version, e.g. '2.3.0'.
+        org_id: Snyk organization UUID to scope the test. If omitted, uses the first available org.
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
+        org = _resolve_orgs(client, org_id)[0]
         result = org.test_python(package_name, version)
         return {
             "ok": result.ok,
+            "org_id": org.id,
+            "org_name": org.name,
             "package": package_name,
             "version": version,
             "packageManager": result.packageManager,
@@ -775,25 +836,27 @@ def snyk_test_python_package(
 
 @mcp.tool()
 def snyk_test_maven_package(
-    org_id: str,
     group_id: str,
     artifact_id: str,
     version: str,
+    org_id: str | None = None,
 ) -> dict:
     """Test a Maven (Java) artifact for known vulnerabilities.
 
     Args:
-        org_id: The Snyk organization UUID to scope the test to.
         group_id: Maven group ID, e.g. 'org.apache.logging.log4j'.
         artifact_id: Maven artifact ID, e.g. 'log4j-core'.
         version: Artifact version, e.g. '2.14.1'.
+        org_id: Snyk organization UUID to scope the test. If omitted, uses the first available org.
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
+        org = _resolve_orgs(client, org_id)[0]
         result = org.test_maven(group_id, artifact_id, version)
         return {
             "ok": result.ok,
+            "org_id": org.id,
+            "org_name": org.name,
             "artifact": f"{group_id}:{artifact_id}",
             "version": version,
             "packageManager": result.packageManager,
@@ -810,23 +873,25 @@ def snyk_test_maven_package(
 
 @mcp.tool()
 def snyk_test_rubygem_package(
-    org_id: str,
     gem_name: str,
     version: str,
+    org_id: str | None = None,
 ) -> dict:
     """Test a Ruby gem for known vulnerabilities.
 
     Args:
-        org_id: The Snyk organization UUID to scope the test to.
         gem_name: Ruby gem name, e.g. 'rails'.
         version: Gem version, e.g. '6.1.4'.
+        org_id: Snyk organization UUID to scope the test. If omitted, uses the first available org.
     """
     def _run() -> dict:
         client = get_client()
-        org = client.organizations.get(org_id)
+        org = _resolve_orgs(client, org_id)[0]
         result = org.test_rubygem(gem_name, version)
         return {
             "ok": result.ok,
+            "org_id": org.id,
+            "org_name": org.name,
             "gem": gem_name,
             "version": version,
             "packageManager": result.packageManager,

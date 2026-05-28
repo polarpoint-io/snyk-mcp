@@ -373,7 +373,7 @@ def test_snyk_test_npm_package(mock_get_client):
     mock_get_client.return_value = _make_mock_client()
     from pysnyk_mcp.server import snyk_test_npm_package
 
-    result = snyk_test_npm_package("org-123", "lodash", "4.17.15")
+    result = snyk_test_npm_package("lodash", "4.17.15", org_id="org-123")
     assert "ok" in result
     assert result["package"] == "lodash"
     assert result["version"] == "4.17.15"
@@ -385,7 +385,7 @@ def test_snyk_test_python_package(mock_get_client):
     mock_get_client.return_value = _make_mock_client()
     from pysnyk_mcp.server import snyk_test_python_package
 
-    result = snyk_test_python_package("org-123", "flask", "2.3.0")
+    result = snyk_test_python_package("flask", "2.3.0", org_id="org-123")
     assert "ok" in result
     assert result["package"] == "flask"
     assert "issue_summary" in result
@@ -397,10 +397,10 @@ def test_snyk_test_maven_package(mock_get_client):
     from pysnyk_mcp.server import snyk_test_maven_package
 
     result = snyk_test_maven_package(
-        "org-123",
         "org.apache.logging.log4j",
         "log4j-core",
         "2.14.1",
+        org_id="org-123",
     )
     assert "ok" in result
     assert "log4j-core" in result["artifact"]
@@ -412,7 +412,7 @@ def test_snyk_test_rubygem_package(mock_get_client):
     mock_get_client.return_value = _make_mock_client()
     from pysnyk_mcp.server import snyk_test_rubygem_package
 
-    result = snyk_test_rubygem_package("org-123", "rails", "6.1.4")
+    result = snyk_test_rubygem_package("rails", "6.1.4", org_id="org-123")
     assert "ok" in result
     assert result["gem"] == "rails"
     assert "issue_summary" in result
@@ -515,9 +515,11 @@ def _make_container_mock_client(origin="docker-hub", is_container=True):
 
     mock_org = MagicMock()
     mock_org.id = "org-123"
+    mock_org.name = "test-org"
     mock_org.projects.all.return_value = [stub_project]
     mock_org.projects.get.return_value = stub_project
 
+    client.organizations.all.return_value = [mock_org]
     client.organizations.get.return_value = mock_org
     return client
 
@@ -657,3 +659,100 @@ def test_generic_error_surfaces_cleanly(mock_get_client):
     result = snyk_list_organizations()
     assert result["error"] == "RuntimeError"
     assert "Network timeout" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery tests (org_id omitted → all orgs)
+# ---------------------------------------------------------------------------
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_container_projects_no_org(mock_get_client):
+    """Container projects should aggregate across all orgs when org_id is omitted."""
+    mock_get_client.return_value = _make_container_mock_client(origin="docker-hub")
+
+    from pysnyk_mcp.server import snyk_list_container_projects
+
+    result = snyk_list_container_projects()  # no org_id
+    assert result["count"] == 1
+    proj = result["container_projects"][0]
+    assert proj["org_id"] == "org-123"
+    assert proj["org_name"] == "test-org"
+    assert proj["origin"] == "docker-hub"
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_members_no_org(mock_get_client):
+    """Members should aggregate across all orgs when org_id is omitted."""
+    mock_get_client.return_value = _make_mock_client()
+
+    from pysnyk_mcp.server import snyk_list_members
+
+    result = snyk_list_members()  # no org_id
+    assert result["count"] == 1
+    assert "members" in result
+    assert result["members"][0]["org_id"] == "org-123"
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_integrations_no_org(mock_get_client):
+    """Integrations should aggregate across all orgs when org_id is omitted."""
+    mock_get_client.return_value = _make_mock_client()
+
+    from pysnyk_mcp.server import snyk_list_integrations
+
+    result = snyk_list_integrations()  # no org_id
+    assert result["count"] == 1
+    assert "integrations" in result
+    assert result["integrations"][0]["org_id"] == "org-123"
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_org_licenses_no_org(mock_get_client):
+    """Licenses should aggregate across all orgs when org_id is omitted."""
+    mock_get_client.return_value = _make_mock_client()
+
+    from pysnyk_mcp.server import snyk_list_org_licenses
+
+    result = snyk_list_org_licenses()  # no org_id
+    assert result["count"] == 1
+    assert "licenses" in result
+    assert result["licenses"][0]["org_id"] == "org-123"
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_list_dependencies_no_org(mock_get_client):
+    """Dependencies should use first org when org_id is omitted."""
+    mock_get_client.return_value = _make_mock_client()
+
+    from pysnyk_mcp.server import snyk_list_dependencies
+
+    result = snyk_list_dependencies()  # no org_id
+    assert "count" in result
+    assert "dependencies" in result
+    assert result["org_id"] == "org-123"
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_test_npm_package_no_org(mock_get_client):
+    """npm test should use first org when org_id is omitted."""
+    mock_get_client.return_value = _make_mock_client()
+
+    from pysnyk_mcp.server import snyk_test_npm_package
+
+    result = snyk_test_npm_package("lodash", "4.17.15")  # no org_id
+    assert "ok" in result
+    assert result["package"] == "lodash"
+    assert result["org_id"] == "org-123"
+
+
+@patch("pysnyk_mcp.server.get_client")
+def test_snyk_test_python_package_no_org(mock_get_client):
+    """Python test should use first org when org_id is omitted."""
+    mock_get_client.return_value = _make_mock_client()
+
+    from pysnyk_mcp.server import snyk_test_python_package
+
+    result = snyk_test_python_package("flask", "2.3.0")  # no org_id
+    assert "ok" in result
+    assert result["package"] == "flask"
+    assert result["org_id"] == "org-123"
