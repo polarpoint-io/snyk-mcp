@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/polarpoint-io/snyk-mcp/compare/v1.0.0...v1.1.0) (2026-05-28)
+
+
+### Features
+
+* make org_id optional — auto-discover orgs across all tools ([3604805](https://github.com/polarpoint-io/snyk-mcp/commit/3604805abdff11745ff9bde841be41368a6c7573))
+
 # 1.0.0 (2026-05-27)
 
 
