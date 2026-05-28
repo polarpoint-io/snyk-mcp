@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/polarpoint-io/snyk-mcp/compare/v1.1.0...v1.2.0) (2026-05-28)
+
+
+### Features
+
+* add snyk_list_org_ids and snyk_list_project_ids discovery tools ([bbfed62](https://github.com/polarpoint-io/snyk-mcp/commit/bbfed62fb33501888a3e0f074fee7bdad0c98458))
+
 # [1.1.0](https://github.com/polarpoint-io/snyk-mcp/compare/v1.0.0...v1.1.0) (2026-05-28)
 
 
