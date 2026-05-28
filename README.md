@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server that exposes [Snyk](https://snyk.io) to LL
 
 Ask an LLM things like "which of our npm projects have critical vulnerabilities?", "show me all CVEs in our nginx container image", or "test the latest version of lodash for known CVEs" — and the LLM answers by calling Snyk directly through this server.
 
-> **PyPI**: `pip install pysnyk-mcp` &nbsp;·&nbsp; **Image**: `ghcr.io/polarpoint-io/snyk-mcp:latest` &nbsp;·&nbsp; **Repo**: <https://github.com/polarpoint-io/snyk-mcp>
+> **uvx**: `uvx pysnyk-mcp` &nbsp;·&nbsp; **PyPI**: `pip install pysnyk-mcp` &nbsp;·&nbsp; **Image**: `ghcr.io/polarpoint-io/snyk-mcp:latest` &nbsp;·&nbsp; **Repo**: <https://github.com/polarpoint-io/snyk-mcp>
 
 ## Table of contents
 
@@ -21,7 +21,20 @@ Ask an LLM things like "which of our npm projects have critical vulnerabilities?
 
 ## Quick start
 
-### 1. pip (no Docker)
+### 1. uvx (recommended — zero install)
+
+[uv](https://docs.astral.sh/uv/) runs the server directly from PyPI with no prior installation step.
+
+```bash
+# Install uv once (if you don't have it)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+export SNYK_TOKEN=your_snyk_api_token
+uvx pysnyk-mcp                                          # stdio
+TRANSPORT=http HTTP_PORT=8000 uvx pysnyk-mcp            # HTTP/SSE
+```
+
+### 2. pip
 
 ```bash
 pip install pysnyk-mcp
@@ -31,7 +44,7 @@ pysnyk-mcp                                    # stdio
 TRANSPORT=http HTTP_PORT=8000 pysnyk-mcp      # HTTP/SSE
 ```
 
-### 2. Docker (stdio — launched by your MCP client)
+### 3. Docker (stdio — launched by your MCP client)
 
 ```bash
 docker pull ghcr.io/polarpoint-io/snyk-mcp:latest
@@ -41,7 +54,7 @@ docker run --rm -i \
   ghcr.io/polarpoint-io/snyk-mcp:latest
 ```
 
-### 3. Docker (HTTP/SSE — standalone service)
+### 4. Docker (HTTP/SSE — standalone service)
 
 ```bash
 docker run --rm \
@@ -71,12 +84,7 @@ See [`.env.example`](.env.example) for a copy-pasteable template.
 
 ## Client integrations
 
-Each client supports two transport options — **pip** (recommended, no Docker required) or **Docker**.
-
-```bash
-# Install once
-pip install pysnyk-mcp
-```
+Each client supports three options — **uvx** (recommended, zero install), **pip**, or **Docker**.
 
 ---
 
@@ -84,7 +92,22 @@ pip install pysnyk-mcp
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
-**pip (recommended)**
+**uvx (recommended)**
+```json
+{
+  "mcpServers": {
+    "snyk": {
+      "command": "uvx",
+      "args": ["pysnyk-mcp"],
+      "env": {
+        "SNYK_TOKEN": "your_snyk_api_token"
+      }
+    }
+  }
+}
+```
+
+**pip**
 ```json
 {
   "mcpServers": {
@@ -123,12 +146,17 @@ Restart Claude Desktop after editing. You should see a hammer icon in the chat c
 
 ### Claude Code
 
-**pip (recommended)**
+**uvx (recommended)**
+```bash
+claude mcp add snyk -- uvx pysnyk-mcp
+export SNYK_TOKEN=your_snyk_api_token
+```
+
+**pip**
 ```bash
 pip install pysnyk-mcp
 
 claude mcp add snyk -- pysnyk-mcp
-# then export your token before running claude:
 export SNYK_TOKEN=your_snyk_api_token
 ```
 
@@ -147,7 +175,22 @@ export SNYK_TOKEN=your_snyk_api_token
 
 Edit `~/.cursor/mcp.json`:
 
-**pip (recommended)**
+**uvx (recommended)**
+```json
+{
+  "mcpServers": {
+    "snyk": {
+      "command": "uvx",
+      "args": ["pysnyk-mcp"],
+      "env": {
+        "SNYK_TOKEN": "your_snyk_api_token"
+      }
+    }
+  }
+}
+```
+
+**pip**
 ```json
 {
   "mcpServers": {
@@ -181,7 +224,19 @@ Edit `~/.cursor/mcp.json`:
 
 Edit `~/.continue/config.json`:
 
-**pip (recommended)**
+**uvx (recommended)**
+```json
+{
+  "mcpServers": [{
+    "name": "snyk",
+    "command": "uvx",
+    "args": ["pysnyk-mcp"],
+    "env": { "SNYK_TOKEN": "your_snyk_api_token" }
+  }]
+}
+```
+
+**pip**
 ```json
 {
   "mcpServers": [{
@@ -212,6 +267,9 @@ Edit `~/.continue/config.json`:
 If you prefer to run the server as a persistent HTTP service rather than a subprocess:
 
 ```bash
+# uvx
+SNYK_TOKEN=your_token TRANSPORT=http HTTP_PORT=8000 uvx pysnyk-mcp
+
 # pip
 pip install pysnyk-mcp
 SNYK_TOKEN=your_token TRANSPORT=http HTTP_PORT=8000 pysnyk-mcp
